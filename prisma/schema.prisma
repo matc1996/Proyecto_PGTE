@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Tecnico {
+  id       Int       @id @default(autoincrement())
+  nombre   String
+  correo   String    @unique
+  rol      String
+  clientes Cliente[]
+
+  @@map("tecnico")
+}
+
+model Cliente {
+  id        Int        @id @default(autoincrement())
+  nombre    String
+  rut       String?    @unique
+  email     String?
+  telefono  String
+  createdAt DateTime   @default(now()) @map("created_at")
+  tecnicoId Int?       @map("tecnico_id")
+  tecnico   Tecnico?   @relation(fields: [tecnicoId], references: [id])
+  viviendas Vivienda[]
+
+  @@map("cliente")
+}
+
+model Vivienda {
+  id            Int            @id @default(autoincrement())
+  direccion     String
+  tipo          String
+  clienteId     Int            @map("cliente_id")
+  cliente       Cliente        @relation(fields: [clienteId], references: [id])
+  levantamientos Levantamiento[]
+
+  @@map("vivienda")
+}
+
+model Levantamiento {
+  id              Int            @id @default(autoincrement())
+  fechaVisita     DateTime       @map("fecha_visita")
+  observaciones   String?
+  viviendaId      Int            @map("vivienda_id")
+  vivienda        Vivienda       @relation(fields: [viviendaId], references: [id])
+  fichaDigital    FichaDigital?
+  itemsElectricos ItemElectrico[]
+  materiales      Material[]
+  trabajos        Trabajo[]
+
+  @@map("levantamiento")
+}
+
+model FichaDigital {
+  id              Int           @id @default(autoincrement())
+  fechaGeneracion DateTime      @map("fecha_generacion")
+  resumen         String?
+  recomendacionIa String?       @map("recomendacion_ia")
+  levantamientoId Int           @unique @map("levantamiento_id")
+  levantamiento   Levantamiento @relation(fields: [levantamientoId], references: [id])
+
+  @@map("ficha_digital")
+}
+
+model ItemElectrico {
+  id              Int           @id @default(autoincrement())
+  tipo            String
+  ubicacion       String
+  estado          String
+  levantamientoId Int           @map("levantamiento_id")
+  levantamiento   Levantamiento @relation(fields: [levantamientoId], references: [id])
+
+  @@map("item_electrico")
+}
+
+model Material {
+  id              Int           @id @default(autoincrement())
+  nombre          String
+  cantidad        Int
+  levantamientoId Int           @map("levantamiento_id")
+  levantamiento   Levantamiento @relation(fields: [levantamientoId], references: [id])
+
+  @@map("material")
+}
+
+model Trabajo {
+  id              Int           @id @default(autoincrement())
+  descripcion     String
+  prioridad       String
+  levantamientoId Int           @map("levantamiento_id")
+  levantamiento   Levantamiento @relation(fields: [levantamientoId], references: [id])
+
+  @@map("trabajo")
+}
