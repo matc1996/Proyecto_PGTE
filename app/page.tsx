@@ -4,10 +4,10 @@ import { crearCliente, obtenerClientes } from "@/lib/actions/clientes.actions";
 export default async function Home() {
   // Capturamos lo que retorna la Server Action
   const resultadoCreacion = await crearCliente({
-    nombre: "Constructora del Sur SpA",
-    rut: "76543210-K",
-    telefono: "+56991122334",
-    email: "contacto@constructoradelsur.cl",
+    nombre: "Constructora del oeste SpA",
+    rut: "193910247",
+    telefono: "+56982134256",
+    email: "contacto@constructoradelnorte.cl",
     observaciones: "Prueba con control de duplicados",
   });
 

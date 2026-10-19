@@ -1,8 +1,9 @@
 'use server';
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
-interface CrearClienteInput {
+interface ClienteInput {
   nombre: string;
   rut?: string;
   telefono: string;
@@ -10,9 +11,9 @@ interface CrearClienteInput {
   observaciones?: string;
 }
 
-/**
- * Obtiene todos los clientes registrados ordenados por fecha de creación.
- */
+
+// Obtiene todos los clientes registrados ordenados por fecha de creación.
+ 
 export async function obtenerClientes() {
   try {
     const clientes = await prisma.cliente.findMany({
@@ -25,38 +26,135 @@ export async function obtenerClientes() {
   }
 }
 
-export async function crearCliente(data: CrearClienteInput) {
+function normalizarRut(rut?: string): string | null {
+  if (!rut) return null;
+  
+  // Limpiamos puntos, espacios y pasamos a mayúsculas
+  let limpio = rut.replace(/\./g, "").replace(/\s/g, "").toUpperCase();
+  if (limpio === "") return null;
+
+  //Si el usuario ingresó el RUT sin guion, 
+  // se le agrega antes del último digito.
+  if (!limpio.includes("-") && limpio.length > 1) {
+    const cuerpo = limpio.slice(0, -1);
+    const dv = limpio.slice(-1);
+    limpio = `${cuerpo}-${dv}`;
+  }
+
+  return limpio;
+}
+
+export async function crearCliente(data: ClienteInput) {
   try {
-    // Si viene un RUT, verificamos si ya existe en la base de datos para evitar duplicados
-    if (data.rut && data.rut.trim() !== "") {
+    if (!data.nombre?.trim() || !data.telefono?.trim()) {
+      return { success: false, error: "El nombre y el teléfono son obligatorios." };
+    }
+
+    
+    const rutNormalizado = normalizarRut(data.rut);
+
+    //control de duplicados
+    if (rutNormalizado) {
       const clienteExistente = await prisma.cliente.findFirst({
-        where: { rut: data.rut },
+        where: { rut: rutNormalizado },
       });
 
       if (clienteExistente) {
-        // Opcional: Podrías actualizarlo o simplemente retornar que ya existe
+        // Retornamos success: FALSE porque la creación falló al ya existir
         return { 
-          success: true, 
-          data: clienteExistente, 
-          mensaje: "El cliente ya existía en la base de datos ." 
+          success: false, 
+          error: `Ya existe un cliente registrado con el RUT ${data.rut}: ${clienteExistente.nombre}.` 
         };
       }
     }
 
-    // Si no existe (o no vino RUT), lo creamos normalmente
     const nuevoCliente = await prisma.cliente.create({
       data: {
-        nombre: data.nombre,
-        rut: data.rut || "",
-        telefono: data.telefono,
-        email: data.email || "",
-        observaciones: data.observaciones,
+        nombre: data.nombre.trim(),
+        rut: rutNormalizado, 
+        telefono: data.telefono.trim(),
+        email: data.email?.trim() || null,
+        observaciones: data.observaciones?.trim() || null,
       },
-    });
+    }); 
+    
+    revalidatePath("/clientes");
 
     return { success: true, data: nuevoCliente, mensaje: "Cliente creado exitosamente." };
   } catch (error) {
     console.error("Error al crear cliente:", error);
     return { success: false, error: "No se pudo registrar el cliente en la base de datos." };
+  }
+}
+
+export async function actualizarCliente(id: string, data: ClienteInput) {
+  try {
+    if (!data.nombre?.trim() || !data.telefono?.trim()) {
+      return { success: false, error: "El nombre y el teléfono son obligatorios." };
+    }
+
+    const rutNormalizado = normalizarRut(data.rut);
+
+    if (rutNormalizado) {
+      const duplicado = await prisma.cliente.findFirst({
+        where: { rut: rutNormalizado, NOT: { id } },
+      });
+      if (duplicado) {
+        return {
+          success: false,
+          error: `Ya existe otro cliente con el RUT ${data.rut}: ${duplicado.nombre}.`,
+        };
+      }
+    }
+
+    const clienteActualizado = await prisma.cliente.update({
+      where: { id },
+      data: {
+        nombre: data.nombre.trim(),
+        rut: rutNormalizado,
+        telefono: data.telefono.trim(),
+        email: data.email?.trim() || null,
+        observaciones: data.observaciones?.trim() || null,
+      },
+    });
+
+    return { success: true, data: clienteActualizado, mensaje: "Cliente actualizado exitosamente." };
+  } catch (error) {
+    console.error("Error al actualizar cliente:", error);
+    return { success: false, error: "No se pudo actualizar el cliente." };
+  }
+}
+
+export async function eliminarCliente(id: string) {
+  try {
+    const cantidadProyectos = await prisma.proyecto.count({
+      where: { clienteId: id },
+    });
+
+    if (cantidadProyectos > 0) {
+      return {
+        success: false,
+        error: `No se puede eliminar: el cliente tiene ${cantidadProyectos} proyecto(s) asociado(s).`,
+      };
+    }
+
+    await prisma.cliente.delete({ where: { id } });
+
+    return { success: true, mensaje: "Cliente eliminado exitosamente." };
+  } catch (error) {
+    console.error("Error al eliminar cliente:", error);
+    return { success: false, error: "No se pudo eliminar el cliente." };
+  }
+}
+
+export async function obtenerClientePorId(id: string) {
+  try {
+    return await prisma.cliente.findUnique({
+      where: { id },
+      include: { inmuebles: { orderBy: { createdAt: "desc" } } },
+    });
+  } catch (error) {
+    console.error("Error al obtener el cliente:", error);
+    return null;
   }
 }
